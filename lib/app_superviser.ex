@@ -18,7 +18,7 @@ defmodule ExBanking.AppSuperviser do
       %{id: :users_table_server, start: {ExBanking.Users.UsersTable, :start_link, []}},
       %{
         id: :transactions_pub_sub,
-        start: {Registry, :start_link, [[keys: :duplicate, name: Registry.PubSub]]}
+        start: {Registry, :start_link, [[keys: :duplicate, name: Registry.TransactionPubSub]]}
       },
       %{
         id: :transactions_table_server,

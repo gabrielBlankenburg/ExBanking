@@ -19,7 +19,7 @@ defmodule ExBanking.Transactions.Gateway do
   and return the balance result. This decision was made because this server validates if the user exists before spawning
   a new transaction. In case of getting the balance, the query is pretty much the same with a few handling of the result.
   Hence, as the project grows, it might be worth relying only in the transactions to check if user exists.
-  This server is registered in the PubSub that dispatches when a transaction is finished or failed. In both cases, the server
+  This server is registered in the TransactionPubSub that dispatches when a transaction is finished or failed. In both cases, the server
   will take the transaction data, lookup its state, replying the client stored in the `transactions_state` and removing it from
   the state, also decrementing the operations count and calling the next user operation for that user.
 
@@ -78,7 +78,7 @@ defmodule ExBanking.Transactions.Gateway do
   def init(_) do
     users = %{}
     transactions_in_progress = %{}
-    Registry.register(Registry.PubSub, __MODULE__, [])
+    Registry.register(Registry.TransactionPubSub, __MODULE__, [])
     {:ok, {users, transactions_in_progress}}
   end
 

@@ -7,7 +7,7 @@ defmodule ExBanking.Transactions.TransactionWorker do
   Operations follow a pattern of {:credit | :debit, amount, currency, status, new_balance}
   The new balance is nil until the transaction is finished. The value currently is not changed on revert.
   Status is either :in_progress, :finished, {:failed_reverted, reason}.
-  After finishing a transaction, the worker dispatches a message in the pubsub so the gateway can handle the message.
+  After finishing a transaction, the worker dispatches a message in the TransactionPubSub so the gateway can handle the message.
   """
   require Logger
 
@@ -147,7 +147,7 @@ defmodule ExBanking.Transactions.TransactionWorker do
 
   defp dispatch_transaction({name, args}),
     do:
-      Registry.dispatch(Registry.PubSub, ExBanking.Transactions.Gateway, fn subs ->
+      Registry.dispatch(Registry.TransactionPubSub, ExBanking.Transactions.Gateway, fn subs ->
         for {pid, _} <- subs,
             do:
               send(
