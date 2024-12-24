@@ -30,10 +30,10 @@ defmodule ExBanking.Transactions.TransactionWorker do
          {:create_wip_transaction, {:ok, transaction}} <-
            {:create_wip_transaction, create_in_progress_transaction(input)},
          {:ok, {_updated_transaction, updated_balances}} <-
-           execute_operations(transaction, [
-             {:debit, sender, currency, amount},
-             {:credit, receiver, currency, amount}
-           ]) do
+           execute_operations(
+             transaction,
+             generate_operations(input, %{sender: sender, receiver: receiver})
+           ) do
       finish_transaction(transaction, %{
         sender: get_updated_balance_tuple(updated_balances, from_user),
         receiver: get_updated_balance_tuple(updated_balances, to_user)
@@ -52,7 +52,7 @@ defmodule ExBanking.Transactions.TransactionWorker do
          {:create_wip_transaction, {:ok, transaction}} <-
            {:create_wip_transaction, create_in_progress_transaction(input)},
          {:ok, {_updated_transaction, updated_balances}} <-
-           execute_operations(transaction, {:debit, user, currency, amount}) do
+           execute_operations(transaction, generate_operations(input, %{sender: user})) do
       finish_transaction(transaction, %{
         sender: get_updated_balance_tuple(updated_balances, username)
       })
@@ -62,13 +62,13 @@ defmodule ExBanking.Transactions.TransactionWorker do
   end
 
   defp do_execute(%{type: :deposit} = input) do
-    %{sender: username, amount: amount, currency: currency} = input
+    username = input.sender
 
     with {:fetch_user, user} when user != nil <- {:fetch_user, UserAdapter.get_user(username)},
          {:create_wip_transaction, {:ok, transaction}} <-
            {:create_wip_transaction, create_in_progress_transaction(input)},
          {:ok, {_transaction, updated_balances}} <-
-           execute_operations(transaction, {:credit, user, currency, amount}) do
+           execute_operations(transaction, generate_operations(input, %{sender: user})) do
       finish_transaction(transaction, %{
         sender: get_updated_balance_tuple(updated_balances, username)
       })
@@ -76,6 +76,18 @@ defmodule ExBanking.Transactions.TransactionWorker do
       error -> handle_failure([username], error)
     end
   end
+
+  defp generate_operations(%{type: :deposit} = input, users),
+    do: {:credit, users.sender, input.currency, input.amount}
+
+  defp generate_operations(%{type: :withdraw} = input, users),
+    do: {:debit, users.sender, input.currency, input.amount}
+
+  defp generate_operations(%{type: :send} = input, users),
+    do: [
+      {:debit, users.sender, input.currency, input.amount},
+      {:credit, users.receiver, input.currency, input.amount}
+    ]
 
   defp handle_failure(usernames, {:enough_funds, false}) do
     fail_transaction(usernames, :not_enough_funds)
@@ -113,14 +125,14 @@ defmodule ExBanking.Transactions.TransactionWorker do
   defp maybe_revert_and_update(%{operations: operations} = transaction, reason)
        when operations != [] do
     updated_operations =
-      Enum.reduce(operations, [], fn o, acc ->
-        case o do
+      Enum.reduce(operations, [], fn operation, acc ->
+        case operation do
           %{status: status} when status != :finished ->
-            [o | acc]
+            [operation | acc]
 
           %{} ->
-            :ok = revert_operation(o)
-            [Map.put(o, :status, :reverted) | acc]
+            :ok = revert_operation(operation)
+            [Map.put(operation, :status, :reverted) | acc]
         end
       end)
 
@@ -137,10 +149,10 @@ defmodule ExBanking.Transactions.TransactionWorker do
     # At this point, if it fails, there is no much to do other than scheduling a revert for later
     %{id: username, currencies: currencies} = UserAdapter.get_user(o.username)
 
-    # revert in the opposite direction
-    amount = if o.direction == :debit, do: o.amount, else: -o.amount
+    amount = get_amount_with_direction(o.direction, o.amount)
 
-    UserAdapter.update_user(username, Map.update!(currencies, o.currency, fn v -> v + amount end))
+    # reverts in the opposite direction
+    UserAdapter.update_user(username, Map.update!(currencies, o.currency, fn v -> v - amount end))
   end
 
   defp get_updated_balance_tuple(updated_balance, username),
@@ -164,15 +176,22 @@ defmodule ExBanking.Transactions.TransactionWorker do
       end)
 
   defp execute_operations(transaction, operations) when is_list(operations) do
-    Enum.reduce_while(operations, {:ok, {transaction, %{}}}, fn o, {:ok, {t, balances}} ->
-      case do_execute_operations(t, o) do
-        {:ok, {updated_transaction, {username, new_balance}}} ->
-          {:cont, {:ok, {updated_transaction, Map.put(balances, username, new_balance)}}}
+    result =
+      Enum.reduce_while(operations, {transaction, %{}}, fn o, {t, balances} ->
+        case do_execute_operations(t, o) do
+          {:ok, {updated_transaction, {username, new_balance}}} ->
+            {:cont, {updated_transaction, Map.put(balances, username, new_balance)}}
 
-        error ->
-          {:halt, error}
-      end
-    end)
+          error ->
+            {:halt, error}
+        end
+      end)
+
+    case result do
+      {:error, _, _} = error -> error
+      {:error, _} = error -> error
+      result -> {:ok, result}
+    end
   end
 
   defp execute_operations(transaction, operation) do
@@ -189,27 +208,26 @@ defmodule ExBanking.Transactions.TransactionWorker do
          %TransactionAdapter{operations: operations} = transaction,
          {direction, %{id: username, currencies: currencies}, currency, amount}
        ) do
-    parsed_amount = if direction == :debit, do: -amount, else: amount
+    amount_with_direction = get_amount_with_direction(direction, amount)
 
     updated_currencies =
-      Map.update(currencies, currency, parsed_amount, fn balance -> balance + parsed_amount end)
+      Map.update(currencies, currency, amount_with_direction, fn balance ->
+        # subtracts when direction is :debit
+        balance + amount_with_direction
+      end)
 
     new_balance = Map.get(updated_currencies, currency)
 
-    with {:users, :ok} <-
-           {:users,
-            UserAdapter.update_user(
-              username,
-              updated_currencies
-            )},
-         operation <- %{
-           direction: direction,
-           username: username,
-           currency: currency,
-           amount: amount,
-           updated_balance: new_balance,
-           status: :finished
-         },
+    operation = %{
+      direction: direction,
+      username: username,
+      currency: currency,
+      amount: amount,
+      updated_balance: new_balance,
+      status: :finished
+    }
+
+    with {:users, :ok} <- {:users, UserAdapter.update_user(username, updated_currencies)},
          {:transaction, {:ok, updated_transaction}} <-
            {:transaction,
             TransactionAdapter.update_transaction(transaction.id, %{
@@ -221,6 +239,9 @@ defmodule ExBanking.Transactions.TransactionWorker do
       {:transaction, _} -> {:error, :failed_to_update_transaction, transaction}
     end
   end
+
+  defp get_amount_with_direction(:debit, amount), do: -amount
+  defp get_amount_with_direction(:credit, amount), do: amount
 
   defp enough_funds?(%{currencies: currencies}, amount, currency),
     do: Map.get(currencies, currency, 0) >= amount

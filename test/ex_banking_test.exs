@@ -1,4 +1,5 @@
 defmodule ExBankingTest do
+  @moduledoc false
   use ExUnit.Case
 
   alias ExBanking.Transactions.Gateway
@@ -113,7 +114,7 @@ defmodule ExBankingTest do
     end
 
     # We cannot guarantee that by spawning 10 transactions concurrently all of them will be attempted before any of them
-    # finishes, so we use a value way higher than the max rate limit
+    # finishes, so we use a value way higher than the max rate limit tolerance
     concurrent_transactions_count = 0..100
 
     Enum.each(concurrent_transactions_count, fn _ -> deposit.() end)
