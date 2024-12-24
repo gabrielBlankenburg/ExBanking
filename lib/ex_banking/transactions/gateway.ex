@@ -124,7 +124,7 @@ defmodule ExBanking.Transactions.Gateway do
     end
   end
 
-  def handle_call(_, _client, state), do: {:reply, {:error, :unhandled_call, state}}
+  def handle_call(_, _client, state), do: {:reply, {:error, :unhandled_call}, state}
 
   @impl true
   def handle_cast(_, state), do: {:noreply, state}

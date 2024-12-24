@@ -12,7 +12,7 @@ defmodule ExBanking.Transactions.TransactionWorker do
   require Logger
 
   alias ExBanking.Users.UserAdapter
-  alias ExBanking.Transactions.TransactionsTable
+  alias ExBanking.Transactions.TransactionAdapter
 
   def start_worker(opts) do
     spawn(fn ->
@@ -118,14 +118,14 @@ defmodule ExBanking.Transactions.TransactionWorker do
         end
       end)
 
-    TransactionsTable.update_transaction(transaction.id, %{
+    TransactionAdapter.update_transaction(transaction.id, %{
       operations: updated_operations,
       status: {:failed_reverted, reason}
     })
   end
 
   defp maybe_revert_and_update(transaction, reason),
-    do: TransactionsTable.update_transaction(transaction.id, %{status: {:failed, reason}})
+    do: TransactionAdapter.update_transaction(transaction.id, %{status: {:failed, reason}})
 
   defp revert_operation(o) do
     {:ok, %{id: username, currencies: currencies}} = UserAdapter.get_user(o.username)
@@ -140,7 +140,7 @@ defmodule ExBanking.Transactions.TransactionWorker do
     do: {username, Map.get(updated_balance, username)}
 
   defp finish_transaction(transaction, users) do
-    TransactionsTable.update_transaction(transaction.id, %{status: :finished})
+    TransactionAdapter.update_transaction(transaction.id, %{status: :finished})
 
     dispatch_transaction({:finished_transaction, %{users: users, type: transaction.type}})
   end
@@ -189,7 +189,7 @@ defmodule ExBanking.Transactions.TransactionWorker do
   end
 
   defp do_execute_operations(
-         %TransactionsTable{operations: operations} = transaction,
+         %TransactionAdapter{operations: operations} = transaction,
          {direction, %{id: username, currencies: currencies}, currency, amount}
        ) do
     parsed_amount = if direction == :debit, do: -amount, else: amount
@@ -215,7 +215,7 @@ defmodule ExBanking.Transactions.TransactionWorker do
          },
          {:transaction, {:ok, updated_transaction}} <-
            {:transaction,
-            TransactionsTable.update_transaction(transaction.id, %{
+            TransactionAdapter.update_transaction(transaction.id, %{
               operations: [operation | operations]
             })} do
       {:ok, {updated_transaction, {username, new_balance}}}
@@ -229,14 +229,14 @@ defmodule ExBanking.Transactions.TransactionWorker do
     do: Map.get(currencies, currency, 0) >= amount
 
   defp create_in_progress_transaction(input) do
-    %TransactionsTable{
+    %TransactionAdapter{
       id: UUID.uuid4(),
       type: transaction_type(input),
       operations: [],
       status: :in_progress,
       transaction_worker: self()
     }
-    |> TransactionsTable.create_transaction()
+    |> TransactionAdapter.create_transaction()
   end
 
   defp transaction_type({:send, _from_user, _to_user, _currency, _amount}), do: :send
