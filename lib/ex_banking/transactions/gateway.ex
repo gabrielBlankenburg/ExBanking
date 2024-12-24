@@ -34,6 +34,16 @@ defmodule ExBanking.Transactions.Gateway do
   alias ExBanking.Transactions.TransactionWorker
   alias ExBanking.Users.UserModel
 
+  defguard is_valid_input(sender, currency) when is_binary(sender) and is_binary(currency)
+
+  defguard is_valid_input(sender, amount, currency)
+           when is_binary(sender) and is_number(amount) and amount > 0 and is_binary(currency)
+
+  defguard is_valid_input(sender, receiver, amount, currency)
+           when is_binary(sender) and is_binary(receiver) and sender != receiver and
+                  is_number(amount) and
+                  amount > 0 and is_binary(currency)
+
   @max_transactions_queue_for_user 10
   @default_user_state %{
     transactions_queue: [],
@@ -47,26 +57,23 @@ defmodule ExBanking.Transactions.Gateway do
   def start_link, do: GenServer.start_link(__MODULE__, nil, name: __MODULE__)
 
   def send_money(sender, receiver, amount, currency)
-      when is_binary(sender) and is_binary(receiver) and sender != receiver and is_number(amount) and
-             amount > 0 and is_binary(currency),
+      when is_valid_input(sender, receiver, amount, currency),
       do: GenServer.call(__MODULE__, {:send, sender, receiver, currency, amount})
 
   def send_money(_sender, _receiver, _amount, _currency),
     do: {:error, :wrong_arguments}
 
-  def deposit(sender, amount, currency)
-      when is_binary(sender) and is_number(amount) and amount > 0 and is_binary(currency),
-      do: GenServer.call(__MODULE__, {:deposit, sender, currency, amount})
+  def deposit(sender, amount, currency) when is_valid_input(sender, amount, currency),
+    do: GenServer.call(__MODULE__, {:deposit, sender, currency, amount})
 
   def deposit(_sender, _amount, _currency), do: {:error, :wrong_arguments}
 
-  def withdraw(sender, amount, currency)
-      when is_binary(sender) and is_number(amount) and amount > 0 and is_binary(currency),
-      do: GenServer.call(__MODULE__, {:withdraw, sender, currency, amount})
+  def withdraw(sender, amount, currency) when is_valid_input(sender, amount, currency),
+    do: GenServer.call(__MODULE__, {:withdraw, sender, currency, amount})
 
   def withdraw(_sender, _amount, _currency), do: {:error, :wrong_arguments}
 
-  def get_balance(username, currency) when is_binary(username) and is_binary(currency),
+  def get_balance(username, currency) when is_valid_input(username, currency),
     do: GenServer.call(__MODULE__, {:get_balance, username, currency})
 
   def get_balance(_username, _currency),
