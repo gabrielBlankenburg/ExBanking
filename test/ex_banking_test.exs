@@ -21,30 +21,32 @@ defmodule ExBankingTest do
   test "deposit money sucessfully" do
     username = "deposit_test"
     assert :ok == ExBanking.create_user(username)
-    assert {:ok, 10} == ExBanking.deposit(username, 10, "usd")
+    assert {:ok, 32.98} == ExBanking.deposit(username, 32.98, "usd")
   end
 
   test "fail to deposit money with invalid args" do
-    assert {:error, :wrong_arguments} == ExBanking.deposit(:invalid_type, 10, "usd")
-    assert {:error, :wrong_arguments} == ExBanking.deposit("some_user", -10, "usd")
-    assert {:error, :wrong_arguments} == ExBanking.deposit("some_user", 10, :usd)
+    assert {:error, :wrong_arguments} == ExBanking.deposit(:invalid_type, 10.0, "usd")
+    assert {:error, :wrong_arguments} == ExBanking.deposit("some_user", -10.0, "usd")
+    assert {:error, :wrong_arguments} == ExBanking.deposit("some_user", 10.0, :usd)
   end
 
   test "fail to deposit money with unexisting user" do
-    assert {:error, :user_does_not_exist} == ExBanking.deposit("not in our memory", 10, "usd")
+    assert {:error, :user_does_not_exist} == ExBanking.deposit("not in our memory", 10.0, "usd")
   end
 
   test "withdraw money sucessfully" do
     username = "withdraw_test"
     ExBanking.create_user(username)
-    ExBanking.deposit(username, 10, "usd")
-    assert {:ok, 0} = ExBanking.withdraw(username, 10, "usd")
+    ExBanking.deposit(username, 10.39, "usd")
+
+    # without the + signal, erlang will push a warn
+    assert {:ok, +0.0} = ExBanking.withdraw(username, 10.39, "usd")
   end
 
   test "fail to withdraw money with invalid args" do
-    assert {:error, :wrong_arguments} == ExBanking.withdraw(:invalid_type, 10, "usd")
-    assert {:error, :wrong_arguments} == ExBanking.withdraw("some_user", -10, "usd")
-    assert {:error, :wrong_arguments} == ExBanking.withdraw("some_user", 10, :usd)
+    assert {:error, :wrong_arguments} == ExBanking.withdraw(:invalid_type, 10.11, "usd")
+    assert {:error, :wrong_arguments} == ExBanking.withdraw("some_user", -10.11, "usd")
+    assert {:error, :wrong_arguments} == ExBanking.withdraw("some_user", 10.11, :usd)
   end
 
   test "fail to withdraw money with unexisting user" do
@@ -54,10 +56,10 @@ defmodule ExBankingTest do
   test "fail to withdraw money with not enough funds" do
     username = "withdraw_without_funds"
     ExBanking.create_user(username)
-    ExBanking.deposit(username, 10, "usd")
+    ExBanking.deposit(username, 10.0, "usd")
 
-    assert {:error, :not_enough_funds} == ExBanking.withdraw(username, 11, "usd")
-    assert {:error, :not_enough_funds} == ExBanking.withdraw(username, 1, "brl")
+    assert {:error, :not_enough_funds} == ExBanking.withdraw(username, 11.0, "usd")
+    assert {:error, :not_enough_funds} == ExBanking.withdraw(username, 1.0, "brl")
   end
 
   test "send money sucessfully" do
@@ -66,9 +68,10 @@ defmodule ExBankingTest do
 
     ExBanking.create_user(sender)
     ExBanking.create_user(receiver)
-    ExBanking.deposit(sender, 10, "usd")
+    ExBanking.deposit(sender, 10.0, "usd")
 
-    assert {:ok, 0, 10} = ExBanking.send(sender, receiver, 10, "usd")
+    assert {:ok, +0.0, 10.0} == ExBanking.send(sender, receiver, 10.0, "usd")
+    assert {:ok, 10.0} = ExBanking.get_balance(receiver, "usd")
   end
 
   test "fail to send money when sender does not have enough funds" do
@@ -77,7 +80,7 @@ defmodule ExBankingTest do
 
     ExBanking.create_user(sender)
     ExBanking.create_user(receiver)
-    ExBanking.deposit(sender, 10, "usd")
+    ExBanking.deposit(sender, 10.0, "usd")
 
     assert {:error, :not_enough_funds} = ExBanking.send(sender, receiver, 11, "usd")
     assert {:error, :not_enough_funds} = ExBanking.send(sender, receiver, 11, "brl")
@@ -108,7 +111,7 @@ defmodule ExBankingTest do
 
       spawn(fn ->
         sender
-        |> GatewayClient.deposit(10, "usd")
+        |> GatewayClient.deposit(10.0, "usd")
         |> then(&send(pid, {:gateway_response, &1}))
       end)
     end
