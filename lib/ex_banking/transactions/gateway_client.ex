@@ -16,8 +16,21 @@ defmodule ExBanking.Transactions.GatewayClient do
                   is_number(amount) and
                   amount > 0 and is_binary(currency)
 
+  @spec start_link() :: :ignore | {:error, any()} | {:ok, pid()}
   def start_link, do: GenServer.start_link(GatewayServer, nil, name: GatewayServer)
 
+  @doc """
+  Transfer money from sender to receiver for the given currency
+  """
+  @spec send_money(binary(), binary(), number(), binary()) ::
+          {:ok, from_user_balance :: number, to_user_balance :: number}
+          | {:error,
+             :wrong_arguments
+             | :not_enough_money
+             | :sender_does_not_exist
+             | :receiver_does_not_exist
+             | :too_many_requests_to_sender
+             | :too_many_requests_to_receiver}
   def send_money(sender, receiver, amount, currency)
       when is_valid_input(sender, receiver, amount, currency),
       do:
@@ -32,6 +45,12 @@ defmodule ExBanking.Transactions.GatewayClient do
   def send_money(_sender, _receiver, _amount, _currency),
     do: {:error, :wrong_arguments}
 
+  @doc """
+  Deposits money for sender in the given currency
+  """
+  @spec deposit(user :: String.t(), amount :: number, currency :: String.t()) ::
+          {:ok, new_balance :: number}
+          | {:error, :wrong_arguments | :user_does_not_exist | :too_many_requests_to_user}
   def deposit(sender, amount, currency) when is_valid_input(sender, amount, currency),
     do:
       do_call(%{
@@ -43,6 +62,16 @@ defmodule ExBanking.Transactions.GatewayClient do
 
   def deposit(_sender, _amount, _currency), do: {:error, :wrong_arguments}
 
+  @doc """
+  sender withdraws money in the given currency
+  """
+  @spec withdraw(user :: String.t(), amount :: number, currency :: String.t()) ::
+          {:ok, new_balance :: number}
+          | {:error,
+             :wrong_arguments
+             | :user_does_not_exist
+             | :not_enough_money
+             | :too_many_requests_to_user}
   def withdraw(sender, amount, currency) when is_valid_input(sender, amount, currency),
     do:
       do_call(%{
@@ -54,6 +83,12 @@ defmodule ExBanking.Transactions.GatewayClient do
 
   def withdraw(_sender, _amount, _currency), do: {:error, :wrong_arguments}
 
+  @doc """
+  Get balance for user in the given currency
+  """
+  @spec get_balance(user :: String.t(), currency :: String.t()) ::
+          {:ok, balance :: number}
+          | {:error, :wrong_arguments | :user_does_not_exist | :too_many_requests_to_user}
   def get_balance(username, currency) when is_valid_input(username, currency) do
     case GenServer.call(GatewayServer, %{type: :get_balance, sender: username, currency: currency}) do
       {:ok, balance} -> {:ok, Money.to_float!(balance)}

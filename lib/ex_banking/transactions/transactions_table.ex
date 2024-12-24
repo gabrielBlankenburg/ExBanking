@@ -8,10 +8,14 @@ defmodule ExBanking.Transactions.TransactionsTable do
 
   @table_name :transactions
 
+  @spec start_link() :: {:ok, pid()}
   def start_link, do: init()
 
+  @spec table_name() :: atom()
   def table_name, do: @table_name
 
+  @spec create_transaction(tuple()) ::
+          {:error, :transaction_already_exists} | {:ok, tuple()}
   def create_transaction(data) do
     if :ets.insert_new(@table_name, data) do
       {:ok, data}
@@ -20,8 +24,10 @@ defmodule ExBanking.Transactions.TransactionsTable do
     end
   end
 
+  @spec get_transaction(binary()) :: {:error, :not_found} | {:ok, tuple()}
   def get_transaction(id), do: ETS.get_by_id(@table_name, id)
 
+  @spec update_transaction(binary(), map()) :: :ok | {:error, :failed_to_update_transaction}
   def update_transaction(id, data) do
     if :ets.update_element(@table_name, id, data) do
       :ok

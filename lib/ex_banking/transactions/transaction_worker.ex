@@ -2,18 +2,20 @@ defmodule ExBanking.Transactions.TransactionWorker do
   @moduledoc """
   Spawns a transaction, that will execute the operation.
   For each operation in a single transaction (eg. send does two ops, by removing the money from sender and adding to the receiver)
-  the transaction will persist in its memory transaction table in the field `operations`.
+  the transaction will persist the operations in the field `operations`.
   If the transaction fails in any step, it will look the operations and undo the transaction.
   Operations follow a pattern of {:credit | :debit, amount, currency, status, new_balance}
   The new balance is nil until the transaction is finished. The value currently is not changed on revert.
-  Status is either :in_progress, :finished, {:failed_reverted, reason}.
-  After finishing a transaction, the worker dispatches a message in the TransactionPubSub so the gateway can handle the message.
+  Status is either :in_progress, :finished, {:failed | :failed_reverted, reason}.
+  After finishing or failing a transaction, the worker dispatches a message in the TransactionPubSub so the gateway
+  can handle the message.
   """
   require Logger
 
   alias ExBanking.Users.UserAdapter
   alias ExBanking.Transactions.TransactionAdapter
 
+  @spec start_worker(map()) :: pid()
   def start_worker(opts) do
     spawn(fn ->
       do_execute(opts)

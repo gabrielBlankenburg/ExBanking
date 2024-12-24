@@ -1,6 +1,6 @@
 defmodule ExBanking.Transactions.TransactionAdapter do
   @moduledoc """
-  An adapter that will handle the ets transaction table properly
+  An adapter that handles the ets transaction table properly
   """
   alias ExBanking.Transactions.TransactionsTable
 
@@ -19,6 +19,19 @@ defmodule ExBanking.Transactions.TransactionAdapter do
     transaction_worker: 5
   }
 
+  @doc """
+  Creates a new transaction on ets
+  """
+  @spec create_transaction(%ExBanking.Transactions.TransactionAdapter{}) ::
+          {:error, :transaction_already_exists}
+          | {:ok,
+             %ExBanking.Transactions.TransactionAdapter{
+               id: any(),
+               operations: any(),
+               status: any(),
+               transaction_worker: any(),
+               type: any()
+             }}
   def create_transaction(%__MODULE__{} = input) do
     data = {input.id, input.type, input.operations, input.status, input.transaction_worker}
 
@@ -28,6 +41,18 @@ defmodule ExBanking.Transactions.TransactionAdapter do
     end
   end
 
+  @doc """
+  Gets a transaction
+  """
+  @spec get_transaction(binary()) ::
+          nil
+          | %ExBanking.Transactions.TransactionAdapter{
+              id: binary(),
+              operations: list(tuple()),
+              status: :in_progress | :finished | {:failed | :failed_reverted, atom()},
+              transaction_worker: pid(),
+              type: :send | :deposit | :withdraw
+            }
   def get_transaction(id) do
     case TransactionsTable.get_transaction(id) do
       {:ok, result} ->
@@ -38,6 +63,19 @@ defmodule ExBanking.Transactions.TransactionAdapter do
     end
   end
 
+  @doc """
+  Updates a transaction, the kvs, are the field(s) to be changed as key and new values as values
+  """
+  @spec update_transaction(binary(), map()) ::
+          {:error, :failed_to_update_transaction | :no_valid_fields_to_update}
+          | {:ok,
+             %ExBanking.Transactions.TransactionAdapter{
+               id: binary(),
+               operations: list(),
+               status: :finished | :in_progress | {:failed | :failed_reverted, atom()},
+               transaction_worker: pid(),
+               type: :deposit | :send | :withdraw
+             }}
   def update_transaction(id, %{} = kvs) do
     with {:ok, result} <- parse_update_args(kvs),
          :ok <- TransactionsTable.update_transaction(id, result),

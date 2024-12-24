@@ -17,11 +17,14 @@ defmodule ExBanking.Transactions.GatewayServer do
   The operations are sending, depositing, and withdrawing money, as well as getting balance.
   The get balance is the only operation that does not spawn any new worker, instead it will just call the users table
   and return the balance result. This decision was made because this server validates if the user exists before spawning
-  a new transaction. In case of getting the balance, the query is pretty much the same with a few handling of the result.
+  a new transaction. In case of getting the balance, the query is pretty much the same with a few parsing of the result.
   Hence, as the project grows, it might be worth relying only in the transactions to check if user exists.
   This server is registered in the TransactionPubSub that dispatches when a transaction is finished or failed. In both cases, the server
   will take the transaction data, lookup its state, replying the client stored in the `transactions_state` and removing it from
   the state, also decrementing the operations count and calling the next user operation for that user.
+  Note: The server does not monitor the workers, because the idea is to futurely implement a health checker worker, that
+  will lookup the transactions tables, checking if their worker owner is still alive and otherwise it reverts and releases
+  the transaction.
 
   TODO
   Lookup the transactions table on init to reconstruct its state on restarts. Worth to note that the transactions_queue would be
