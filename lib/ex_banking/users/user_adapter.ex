@@ -1,8 +1,10 @@
-defmodule ExBanking.Users.UserModel do
+defmodule ExBanking.Users.UserAdapter do
   @moduledoc """
   Adapter for `ExBanking.Users.UsersTable`
   """
   alias ExBanking.Users.UsersTable
+
+  defstruct [:id, :currencies]
 
   @spec create_user(any()) :: :ok | {:error, :user_already_exists | :wrong_arguments}
   def create_user(username) when is_binary(username) do
@@ -17,7 +19,7 @@ defmodule ExBanking.Users.UserModel do
   def get_user(username) when is_binary(username) do
     case UsersTable.get_user(username) do
       {:ok, user} ->
-        {:ok, user}
+        {:ok, parse_result(user)}
 
       {:error, :not_found} ->
         {:error, :user_does_not_exist}
@@ -51,4 +53,6 @@ defmodule ExBanking.Users.UserModel do
   end
 
   def update_user(_username, _currencies), do: {:error, :wrong_arguments}
+
+  defp parse_result({username, currencies}), do: %__MODULE__{id: username, currencies: currencies}
 end

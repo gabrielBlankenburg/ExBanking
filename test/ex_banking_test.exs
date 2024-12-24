@@ -1,18 +1,18 @@
 defmodule ExBankingTest do
   use ExUnit.Case
 
-  alias ExBanking.Users.UserModel
+  alias ExBanking.Users.UserAdapter
 
   test "creates a user sucessfully when providing proper arguments" do
     username = "valid_user"
     assert :ok == ExBanking.create_user(username)
-    assert {:ok, {^username, %{}}} = UserModel.get_user(username)
+    assert {:ok, %UserAdapter{id: ^username, currencies: %{}}} = UserAdapter.get_user(username)
   end
 
   test "fails with {:error, :user_already_exists} when trying to duplicate user" do
     username = "duplicated_user"
     assert :ok == ExBanking.create_user(username)
-    assert {:ok, {^username, %{}}} = UserModel.get_user(username)
+    assert {:ok, %UserAdapter{id: ^username, currencies: %{}}} = UserAdapter.get_user(username)
     assert {:error, :user_already_exists} == ExBanking.create_user(username)
   end
 

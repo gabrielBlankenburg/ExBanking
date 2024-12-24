@@ -32,7 +32,7 @@ defmodule ExBanking.Transactions.Gateway do
   require Logger
 
   alias ExBanking.Transactions.TransactionWorker
-  alias ExBanking.Users.UserModel
+  alias ExBanking.Users.UserAdapter
 
   defguard is_valid_input(sender, currency) when is_binary(sender) and is_binary(currency)
 
@@ -268,8 +268,8 @@ defmodule ExBanking.Transactions.Gateway do
            update_users_status(usernames, available_users_state, :unavailable),
          updated_users_state <- increment_user_queue_count(updated_users_state, from_user),
          {:get_users, {{:ok, _sender}, _}, {{:ok, _receiver}, _}} <-
-           {:get_users, {UserModel.get_user(from_user), from_user},
-            {UserModel.get_user(to_user), to_user}},
+           {:get_users, {UserAdapter.get_user(from_user), from_user},
+            {UserAdapter.get_user(to_user), to_user}},
          updated_transactions_state <-
            start_transaction(new_transaction, client, transactions_state) do
       {:ok, {updated_users_state, updated_transactions_state}}
@@ -305,7 +305,7 @@ defmodule ExBanking.Transactions.Gateway do
          updated_users_state <-
            update_users_status(username, available_users_state, :unavailable),
          updated_users_state <- increment_user_queue_count(updated_users_state, username),
-         {:get_user, {:ok, _username}} <- {:get_user, UserModel.get_user(username)},
+         {:get_user, {:ok, _username}} <- {:get_user, UserAdapter.get_user(username)},
          updated_transactions_state <-
            start_transaction(new_transaction, client, transactions_state) do
       {:ok, {updated_users_state, updated_transactions_state}}
@@ -338,7 +338,7 @@ defmodule ExBanking.Transactions.Gateway do
          updated_users_state <-
            update_users_status(username, available_users_state, :unavailable),
          updated_users_state <- increment_user_queue_count(updated_users_state, username),
-         {:ok, new_balance} <- UserModel.get_balance(username, currency) do
+         {:ok, new_balance} <- UserAdapter.get_balance(username, currency) do
       GenServer.reply(client, {:ok, new_balance})
 
       next(username)

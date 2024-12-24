@@ -15,4 +15,4 @@ The Transaction Worker handles a single transaction. When it fails (without the 
 - Make the Gateway partially recover its state on restart;
 - Create a health server, that checks peridically if the persisted wip transactions have their worker pid alive,
 otherwise, it should reverted the finished operations and release the users on gateway;
-- Separate better the logic of ets tables and their models.
+- Separate better the logic of ets tables and their adapters.

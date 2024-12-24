@@ -11,7 +11,7 @@ defmodule ExBanking.Transactions.TransactionWorker do
   """
   require Logger
 
-  alias ExBanking.Users.UserModel
+  alias ExBanking.Users.UserAdapter
   alias ExBanking.Transactions.TransactionsTable
 
   def start_worker(opts) do
@@ -128,12 +128,12 @@ defmodule ExBanking.Transactions.TransactionWorker do
     do: TransactionsTable.update_transaction(transaction.id, %{status: {:failed, reason}})
 
   defp revert_operation(o) do
-    {:ok, {username, currencies}} = UserModel.get_user(o.username)
+    {:ok, %{id: username, currencies: currencies}} = UserAdapter.get_user(o.username)
 
     # revert in the opposite direction
     amount = if o.direction == :debit, do: o.amount, else: -o.amount
 
-    UserModel.update_user(username, Map.update!(currencies, o.currency, fn v -> v + amount end))
+    UserAdapter.update_user(username, Map.update!(currencies, o.currency, fn v -> v + amount end))
   end
 
   defp get_updated_balance_tuple(updated_balance, username),
@@ -157,7 +157,7 @@ defmodule ExBanking.Transactions.TransactionWorker do
       end)
 
   defp fetch_user(username) do
-    case UserModel.get_user(username) do
+    case UserAdapter.get_user(username) do
       {:ok, user} ->
         user
 
@@ -190,7 +190,7 @@ defmodule ExBanking.Transactions.TransactionWorker do
 
   defp do_execute_operations(
          %TransactionsTable{operations: operations} = transaction,
-         {direction, {username, currencies}, currency, amount}
+         {direction, %{id: username, currencies: currencies}, currency, amount}
        ) do
     parsed_amount = if direction == :debit, do: -amount, else: amount
 
@@ -201,7 +201,7 @@ defmodule ExBanking.Transactions.TransactionWorker do
 
     with {:users, :ok} <-
            {:users,
-            UserModel.update_user(
+            UserAdapter.update_user(
               username,
               updated_currencies
             )},
@@ -225,7 +225,7 @@ defmodule ExBanking.Transactions.TransactionWorker do
     end
   end
 
-  defp enough_funds?({_username, currencies}, amount, currency),
+  defp enough_funds?(%{currencies: currencies}, amount, currency),
     do: Map.get(currencies, currency, 0) >= amount
 
   defp create_in_progress_transaction(input) do

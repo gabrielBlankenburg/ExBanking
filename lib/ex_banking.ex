@@ -2,14 +2,14 @@ defmodule ExBanking do
   @moduledoc """
   API for banking operations
   """
-  alias ExBanking.Users.UserModel
+  alias ExBanking.Users.UserAdapter
   alias ExBanking.Transactions.Gateway
 
   @doc """
   Creates a user in the system
   """
   @spec create_user(user :: String.t()) :: :ok | {:error, :wrong_arguments | :user_already_exists}
-  def create_user(user), do: UserModel.create_user(user)
+  def create_user(user), do: UserAdapter.create_user(user)
 
   @spec deposit(user :: String.t(), amount :: number, currency :: String.t()) ::
           {:ok, new_balance :: number}
