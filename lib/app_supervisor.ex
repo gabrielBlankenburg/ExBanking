@@ -24,7 +24,7 @@ defmodule ExBanking.AppSupervisor do
         id: :transactions_table_server,
         start: {ExBanking.Transactions.TransactionsTable, :start_link, []}
       },
-      %{id: :gateway, start: {ExBanking.Transactions.Gateway, :start_link, []}}
+      %{id: :gateway, start: {ExBanking.Transactions.GatewayClient, :start_link, []}}
     ]
 
     Supervisor.start_link(children, strategy: :rest_for_one, name: __MODULE__)

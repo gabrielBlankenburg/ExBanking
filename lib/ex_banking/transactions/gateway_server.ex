@@ -1,6 +1,6 @@
-defmodule ExBanking.Transactions.Gateway do
+defmodule ExBanking.Transactions.GatewayServer do
   @moduledoc """
-  The Gateway is a server responsible for rate limiting, enqueing, and dispatching banking operations.
+  The GatewayServer is a server responsible for rate limiting, enqueing, and dispatching banking operations.
   Its state is composed by a tuple {users_state, transactions_state}
   The users state is a map, where the key is the username (key in users table) and the value is another map with:
     - transactions_queue: list of enqueued operations. After user is released it will execute the next transaction.
@@ -34,16 +34,6 @@ defmodule ExBanking.Transactions.Gateway do
   alias ExBanking.Transactions.TransactionWorker
   alias ExBanking.Users.UserAdapter
 
-  defguard is_valid_input(sender, currency) when is_binary(sender) and is_binary(currency)
-
-  defguard is_valid_input(sender, amount, currency)
-           when is_binary(sender) and is_number(amount) and amount > 0 and is_binary(currency)
-
-  defguard is_valid_input(sender, receiver, amount, currency)
-           when is_binary(sender) and is_binary(receiver) and sender != receiver and
-                  is_number(amount) and
-                  amount > 0 and is_binary(currency)
-
   @max_transactions_queue_for_user 10
   @default_user_state %{
     transactions_queue: [],
@@ -51,54 +41,6 @@ defmodule ExBanking.Transactions.Gateway do
     status: :available,
     id: nil
   }
-
-  # Client
-
-  def start_link, do: GenServer.start_link(__MODULE__, nil, name: __MODULE__)
-
-  def send_money(sender, receiver, amount, currency)
-      when is_valid_input(sender, receiver, amount, currency),
-      do:
-        GenServer.call(__MODULE__, %{
-          type: :send,
-          sender: sender,
-          receiver: receiver,
-          currency: currency,
-          amount: amount
-        })
-
-  def send_money(_sender, _receiver, _amount, _currency),
-    do: {:error, :wrong_arguments}
-
-  def deposit(sender, amount, currency) when is_valid_input(sender, amount, currency),
-    do:
-      GenServer.call(__MODULE__, %{
-        type: :deposit,
-        sender: sender,
-        currency: currency,
-        amount: amount
-      })
-
-  def deposit(_sender, _amount, _currency), do: {:error, :wrong_arguments}
-
-  def withdraw(sender, amount, currency) when is_valid_input(sender, amount, currency),
-    do:
-      GenServer.call(__MODULE__, %{
-        type: :withdraw,
-        sender: sender,
-        currency: currency,
-        amount: amount
-      })
-
-  def withdraw(_sender, _amount, _currency), do: {:error, :wrong_arguments}
-
-  def get_balance(username, currency) when is_valid_input(username, currency),
-    do: GenServer.call(__MODULE__, %{type: :get_balance, sender: username, currency: currency})
-
-  def get_balance(_username, _currency),
-    do: {:error, :wrong_arguments}
-
-  # Server
 
   @impl true
   def init(_) do

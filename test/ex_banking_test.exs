@@ -2,7 +2,7 @@ defmodule ExBankingTest do
   @moduledoc false
   use ExUnit.Case
 
-  alias ExBanking.Transactions.Gateway
+  alias ExBanking.Transactions.GatewayClient
   alias ExBanking.Users.UserAdapter
 
   test "creates a user sucessfully when providing proper arguments" do
@@ -108,7 +108,7 @@ defmodule ExBankingTest do
 
       spawn(fn ->
         sender
-        |> Gateway.deposit(10, "usd")
+        |> GatewayClient.deposit(10, "usd")
         |> then(&send(pid, {:gateway_response, &1}))
       end)
     end
@@ -133,6 +133,6 @@ defmodule ExBankingTest do
     assert too_many_requests != nil
 
     # After transactions are finished, or if the rate limit allows, the user might make another transaction
-    assert Gateway.deposit(sender, 10, "usd")
+    assert GatewayClient.deposit(sender, 10, "usd")
   end
 end

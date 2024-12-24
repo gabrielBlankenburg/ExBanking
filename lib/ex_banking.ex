@@ -3,7 +3,7 @@ defmodule ExBanking do
   API for banking operations
   """
   alias ExBanking.Users.UserAdapter
-  alias ExBanking.Transactions.Gateway
+  alias ExBanking.Transactions.GatewayClient
 
   @doc """
   Creates a user in the system
@@ -14,7 +14,7 @@ defmodule ExBanking do
   @spec deposit(user :: String.t(), amount :: number, currency :: String.t()) ::
           {:ok, new_balance :: number}
           | {:error, :wrong_arguments | :user_does_not_exist | :too_many_requests_to_user}
-  def deposit(user, amount, currency), do: Gateway.deposit(user, amount, currency)
+  def deposit(user, amount, currency), do: GatewayClient.deposit(user, amount, currency)
 
   @doc """
   User withdraw money for the given currency and amount
@@ -26,7 +26,7 @@ defmodule ExBanking do
              | :user_does_not_exist
              | :not_enough_money
              | :too_many_requests_to_user}
-  def withdraw(user, amount, currency), do: Gateway.withdraw(user, amount, currency)
+  def withdraw(user, amount, currency), do: GatewayClient.withdraw(user, amount, currency)
 
   @doc """
   Gets the user's balance of given currency
@@ -34,7 +34,7 @@ defmodule ExBanking do
   @spec get_balance(user :: String.t(), currency :: String.t()) ::
           {:ok, balance :: number}
           | {:error, :wrong_arguments | :user_does_not_exist | :too_many_requests_to_user}
-  def get_balance(user, currency), do: Gateway.get_balance(user, currency)
+  def get_balance(user, currency), do: GatewayClient.get_balance(user, currency)
 
   @doc """
   Transfer money from sender to receiver
@@ -54,5 +54,5 @@ defmodule ExBanking do
              | :too_many_requests_to_sender
              | :too_many_requests_to_receiver}
   def send(from_user, to_user, amount, currency),
-    do: Gateway.send_money(from_user, to_user, amount, currency)
+    do: GatewayClient.send_money(from_user, to_user, amount, currency)
 end

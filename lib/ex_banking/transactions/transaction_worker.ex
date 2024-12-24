@@ -166,14 +166,18 @@ defmodule ExBanking.Transactions.TransactionWorker do
 
   defp dispatch_transaction({name, args}),
     do:
-      Registry.dispatch(Registry.TransactionPubSub, ExBanking.Transactions.Gateway, fn subs ->
-        for {pid, _} <- subs,
-            do:
-              send(
-                pid,
-                {name, Map.put(args, :pid, self())}
-              )
-      end)
+      Registry.dispatch(
+        Registry.TransactionPubSub,
+        ExBanking.Transactions.GatewayServer,
+        fn subs ->
+          for {pid, _} <- subs,
+              do:
+                send(
+                  pid,
+                  {name, Map.put(args, :pid, self())}
+                )
+        end
+      )
 
   defp execute_operations(transaction, operations) when is_list(operations) do
     result =

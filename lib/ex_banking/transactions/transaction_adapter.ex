@@ -1,4 +1,7 @@
 defmodule ExBanking.Transactions.TransactionAdapter do
+  @moduledoc """
+  An adapter that will handle the ets transaction table properly
+  """
   alias ExBanking.Transactions.TransactionsTable
 
   defstruct [
