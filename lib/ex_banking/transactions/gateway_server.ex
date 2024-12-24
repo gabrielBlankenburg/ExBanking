@@ -51,22 +51,14 @@ defmodule ExBanking.Transactions.GatewayServer do
   end
 
   @impl true
-  def handle_call(
-        %{type: :send} = new_transaction,
-        client,
-        state
-      ) do
+  def handle_call(%{type: :send} = new_transaction, client, state) do
     case execute_transaction(new_transaction, client, state) do
       {:ok, state} -> {:noreply, state}
       {:error, msg, state} -> {:reply, {:error, msg}, state}
     end
   end
 
-  def handle_call(
-        %{type: type} = new_transaction,
-        client,
-        state
-      )
+  def handle_call(%{type: type} = new_transaction, client, state)
       when type in [:deposit, :withdraw] do
     case execute_transaction(new_transaction, client, state) do
       {:ok, state} -> {:noreply, state}
@@ -74,11 +66,7 @@ defmodule ExBanking.Transactions.GatewayServer do
     end
   end
 
-  def handle_call(
-        %{type: :get_balance} = new_transaction,
-        client,
-        state
-      ) do
+  def handle_call(%{type: :get_balance} = new_transaction, client, state) do
     case execute_transaction(new_transaction, client, state) do
       {:ok, state} -> {:noreply, state}
       {:error, msg, state} -> {:reply, {:error, msg}, state}
@@ -93,13 +81,14 @@ defmodule ExBanking.Transactions.GatewayServer do
   # Call next for sender and receiver, also responds the client waiting for the transaction of the transaction_pid
   @impl true
   def handle_info(
-        {:finished_transaction,
-         %{
-           users: %{sender: {sender, sender_balance}, receiver: {receiver, receiver_balance}},
-           pid: transaction_pid
-         }},
+        {:finished_transaction, %{type: :send} = msg},
         {users_state, transactions_state}
       ) do
+    %{
+      users: %{sender: {sender, sender_balance}, receiver: {receiver, receiver_balance}},
+      pid: transaction_pid
+    } = msg
+
     updated_transactions_state =
       case Map.pop(transactions_state, transaction_pid) do
         {nil, result} ->
@@ -132,12 +121,10 @@ defmodule ExBanking.Transactions.GatewayServer do
     {:noreply, {updated_users_state, updated_transactions_state}}
   end
 
-  def handle_info(
-        {:finished_transaction,
-         %{type: type, users: %{sender: {username, balance}}, pid: transaction_pid}},
-        {users_state, transactions_state}
-      )
+  def handle_info({:finished_transaction, %{type: type} = msg}, {users_state, transactions_state})
       when type in [:deposit, :withdraw] do
+    %{users: %{sender: {username, balance}}, pid: transaction_pid} = msg
+
     updated_transactions_state =
       case Map.pop(transactions_state, transaction_pid) do
         {nil, result} ->
