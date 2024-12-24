@@ -58,23 +58,42 @@ defmodule ExBanking.Transactions.Gateway do
 
   def send_money(sender, receiver, amount, currency)
       when is_valid_input(sender, receiver, amount, currency),
-      do: GenServer.call(__MODULE__, {:send, sender, receiver, currency, amount})
+      do:
+        GenServer.call(__MODULE__, %{
+          type: :send,
+          sender: sender,
+          receiver: receiver,
+          currency: currency,
+          amount: amount
+        })
 
   def send_money(_sender, _receiver, _amount, _currency),
     do: {:error, :wrong_arguments}
 
   def deposit(sender, amount, currency) when is_valid_input(sender, amount, currency),
-    do: GenServer.call(__MODULE__, {:deposit, sender, currency, amount})
+    do:
+      GenServer.call(__MODULE__, %{
+        type: :deposit,
+        sender: sender,
+        currency: currency,
+        amount: amount
+      })
 
   def deposit(_sender, _amount, _currency), do: {:error, :wrong_arguments}
 
   def withdraw(sender, amount, currency) when is_valid_input(sender, amount, currency),
-    do: GenServer.call(__MODULE__, {:withdraw, sender, currency, amount})
+    do:
+      GenServer.call(__MODULE__, %{
+        type: :withdraw,
+        sender: sender,
+        currency: currency,
+        amount: amount
+      })
 
   def withdraw(_sender, _amount, _currency), do: {:error, :wrong_arguments}
 
   def get_balance(username, currency) when is_valid_input(username, currency),
-    do: GenServer.call(__MODULE__, {:get_balance, username, currency})
+    do: GenServer.call(__MODULE__, %{type: :get_balance, sender: username, currency: currency})
 
   def get_balance(_username, _currency),
     do: {:error, :wrong_arguments}
@@ -91,7 +110,7 @@ defmodule ExBanking.Transactions.Gateway do
 
   @impl true
   def handle_call(
-        {:send, _from_user, _to_user, _currency, _amount} = new_transaction,
+        %{type: :send} = new_transaction,
         client,
         state
       ) do
@@ -102,7 +121,7 @@ defmodule ExBanking.Transactions.Gateway do
   end
 
   def handle_call(
-        {type, _username, _currency, _amount} = new_transaction,
+        %{type: type} = new_transaction,
         client,
         state
       )
@@ -114,7 +133,7 @@ defmodule ExBanking.Transactions.Gateway do
   end
 
   def handle_call(
-        {:get_balance, _username, _currency} = new_transaction,
+        %{type: :get_balance} = new_transaction,
         client,
         state
       ) do
@@ -256,10 +275,13 @@ defmodule ExBanking.Transactions.Gateway do
   end
 
   defp execute_transaction(
-         {:send, from_user, to_user, _currency, _amount} = new_transaction,
+         %{type: :send} = new_transaction,
          client,
          {users_state, transactions_state} = state
        ) do
+    from_user = new_transaction.sender
+    to_user = new_transaction.receiver
+
     usernames = [from_user, to_user]
 
     with {available_users_state, users} <- init_users_states(usernames, users_state),
@@ -267,72 +289,48 @@ defmodule ExBanking.Transactions.Gateway do
          updated_users_state <-
            update_users_status(usernames, available_users_state, :unavailable),
          updated_users_state <- increment_user_queue_count(updated_users_state, from_user),
-         {:get_users, {{:ok, _sender}, _}, {{:ok, _receiver}, _}} <-
-           {:get_users, {UserAdapter.get_user(from_user), from_user},
+         {:get_user, {%UserAdapter{}, _}, {%UserAdapter{}, _}} <-
+           {:get_user, {UserAdapter.get_user(from_user), from_user},
             {UserAdapter.get_user(to_user), to_user}},
          updated_transactions_state <-
            start_transaction(new_transaction, client, transactions_state) do
       {:ok, {updated_users_state, updated_transactions_state}}
     else
-      {:get_users, {{:error, :user_does_not_exist}, username}, _} when username == from_user ->
-        {:error, :sender_not_found, {Map.delete(users_state, username), transactions_state}}
-
-      {:get_users, _, {{:error, :user_does_not_exist}, username}} when username == to_user ->
-        {:error, :receiver_not_found, {Map.delete(users_state, username), transactions_state}}
-
-      {:users_available, false} ->
-        user_state = Map.get(users_state, from_user, default_user_state(from_user))
-
-        if user_has_queue_limit?(user_state) do
-          updated_users_state =
-            enqueue_operation_for_user(new_transaction, user_state, client, users_state)
-
-          {:ok, {updated_users_state, transactions_state}}
-        else
-          {:error, :too_many_requests_to_user, state}
-        end
+      error -> handle_execute_transaction_failure(new_transaction, client, state, error)
     end
   end
 
   defp execute_transaction(
-         {type, username, _currency, _amount} = new_transaction,
+         %{type: type} = new_transaction,
          client,
          {users_state, transactions_state} = state
        )
        when type in [:deposit, :withdraw] do
+    username = new_transaction.sender
+
     with {available_users_state, users} <- init_users_states(username, users_state),
          {:users_available, true} <- {:users_available, users_available?(users)},
          updated_users_state <-
            update_users_status(username, available_users_state, :unavailable),
          updated_users_state <- increment_user_queue_count(updated_users_state, username),
-         {:get_user, {:ok, _username}} <- {:get_user, UserAdapter.get_user(username)},
+         {:get_user, %UserAdapter{}} <- {:get_user, UserAdapter.get_user(username)},
          updated_transactions_state <-
            start_transaction(new_transaction, client, transactions_state) do
       {:ok, {updated_users_state, updated_transactions_state}}
     else
-      {:get_user, {:error, :user_does_not_exist}} ->
-        {:error, :user_does_not_exist, {Map.delete(users_state, username), transactions_state}}
-
-      {:users_available, false} ->
-        user_state = Map.get(users_state, username, default_user_state(username))
-
-        if user_has_queue_limit?(user_state) do
-          updated_users_state =
-            enqueue_operation_for_user(new_transaction, user_state, client, users_state)
-
-          {:ok, {updated_users_state, transactions_state}}
-        else
-          {:error, :too_many_requests_to_user, state}
-        end
+      error -> handle_execute_transaction_failure(new_transaction, client, state, error)
     end
   end
 
   # Does not dispatch a transaction. It will simply look the user balance
   defp execute_transaction(
-         {:get_balance, username, currency} = new_transaction,
+         %{type: :get_balance} = new_transaction,
          client,
          {users_state, transactions_state} = state
        ) do
+    username = new_transaction.sender
+    currency = new_transaction.currency
+
     with {available_users_state, users} <- init_users_states(username, users_state),
          {:users_available, true} <- {:users_available, users_available?(users)},
          updated_users_state <-
@@ -345,23 +343,63 @@ defmodule ExBanking.Transactions.Gateway do
 
       {:ok, {updated_users_state, transactions_state}}
     else
-      {:error, :user_does_not_exist} ->
-        {:error, :user_does_not_exist, {Map.delete(users_state, username), transactions_state}}
+      error -> handle_execute_transaction_failure(new_transaction, client, state, error)
+    end
+  end
 
-      {:error, :wrong_arguments} ->
-        {:error, :wrong_arguments, state}
+  defp handle_execute_transaction_failure(
+         _new_transaction,
+         _client,
+         {users_state, transactions_state},
+         {:get_user, {nil, username}, _}
+       ) do
+    {:error, :sender_not_found, {Map.delete(users_state, username), transactions_state}}
+  end
 
-      {:users_available, false} ->
-        user_state = Map.get(users_state, username, default_user_state(username))
+  defp handle_execute_transaction_failure(
+         _new_transaction,
+         _client,
+         {users_state, transactions_state},
+         {:get_user, _, {nil, username}}
+       ) do
+    {:error, :receiver_not_found, {Map.delete(users_state, username), transactions_state}}
+  end
 
-        if user_has_queue_limit?(user_state) do
-          updated_users_state =
-            enqueue_operation_for_user(new_transaction, user_state, client, users_state)
+  defp handle_execute_transaction_failure(
+         new_transaction,
+         _client,
+         {users_state, transactions_state},
+         {:get_user, nil}
+       ) do
+    {:error, :user_does_not_exist,
+     {Map.delete(users_state, new_transaction.sender), transactions_state}}
+  end
 
-          {:ok, {updated_users_state, transactions_state}}
-        else
-          {:error, :too_many_requests_to_user, state}
-        end
+  defp handle_execute_transaction_failure(
+         _new_transaction,
+         _client,
+         state,
+         {:error, :wrong_arguments}
+       ) do
+    {:error, :wrong_arguments, state}
+  end
+
+  defp handle_execute_transaction_failure(
+         new_transaction,
+         client,
+         {users_state, transactions_state} = state,
+         {:users_available, false}
+       ) do
+    username = new_transaction.sender
+    user_state = Map.get(users_state, username, default_user_state(username))
+
+    if user_has_queue_limit?(user_state) do
+      updated_users_state =
+        enqueue_operation_for_user(new_transaction, user_state, client, users_state)
+
+      {:ok, {updated_users_state, transactions_state}}
+    else
+      {:error, :too_many_requests_to_user, state}
     end
   end
 

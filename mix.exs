@@ -14,7 +14,7 @@ defmodule ExBanking.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      mod: {ExBanking.AppSuperviser, []},
+      mod: {ExBanking.AppSupervisor, []},
       extra_applications: [:logger]
     ]
   end

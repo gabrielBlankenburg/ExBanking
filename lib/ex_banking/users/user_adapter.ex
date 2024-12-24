@@ -19,10 +19,10 @@ defmodule ExBanking.Users.UserAdapter do
   def get_user(username) when is_binary(username) do
     case UsersTable.get_user(username) do
       {:ok, user} ->
-        {:ok, parse_result(user)}
+        parse_result(user)
 
       {:error, :not_found} ->
-        {:error, :user_does_not_exist}
+        nil
     end
   end
 

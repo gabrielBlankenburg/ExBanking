@@ -20,10 +20,12 @@ defmodule ExBanking.Transactions.TransactionWorker do
     end)
   end
 
-  defp do_execute({:send, from_user, to_user, currency, amount} = input) do
+  defp do_execute(%{type: :send} = input) do
+    %{sender: from_user, receiver: to_user, amount: amount, currency: currency} = input
+
     with {:fetch_users, {sender, receiver}}
          when sender != nil and receiver != nil <-
-           {:fetch_users, {fetch_user(from_user), fetch_user(to_user)}},
+           {:fetch_users, {UserAdapter.get_user(from_user), UserAdapter.get_user(to_user)}},
          {:enough_funds, true} <- {:enough_funds, enough_funds?(sender, amount, currency)},
          {:create_wip_transaction, {:ok, transaction}} <-
            {:create_wip_transaction, create_in_progress_transaction(input)},
@@ -41,8 +43,10 @@ defmodule ExBanking.Transactions.TransactionWorker do
     end
   end
 
-  defp do_execute({:withdraw, username, currency, amount} = input) do
-    with {:fetch_user, user} when user != nil <- {:fetch_user, fetch_user(username)},
+  defp do_execute(%{type: :withdraw} = input) do
+    %{sender: username, amount: amount, currency: currency} = input
+
+    with {:fetch_user, user} when user != nil <- {:fetch_user, UserAdapter.get_user(username)},
          {:enough_funds, true} <-
            {:enough_funds, enough_funds?(user, amount, currency)},
          {:create_wip_transaction, {:ok, transaction}} <-
@@ -57,8 +61,10 @@ defmodule ExBanking.Transactions.TransactionWorker do
     end
   end
 
-  defp do_execute({:deposit, username, currency, amount} = input) do
-    with {:fetch_user, user} when user != nil <- {:fetch_user, fetch_user(username)},
+  defp do_execute(%{type: :deposit} = input) do
+    %{sender: username, amount: amount, currency: currency} = input
+
+    with {:fetch_user, user} when user != nil <- {:fetch_user, UserAdapter.get_user(username)},
          {:create_wip_transaction, {:ok, transaction}} <-
            {:create_wip_transaction, create_in_progress_transaction(input)},
          {:ok, {_transaction, updated_balances}} <-
@@ -128,7 +134,8 @@ defmodule ExBanking.Transactions.TransactionWorker do
     do: TransactionAdapter.update_transaction(transaction.id, %{status: {:failed, reason}})
 
   defp revert_operation(o) do
-    {:ok, %{id: username, currencies: currencies}} = UserAdapter.get_user(o.username)
+    # At this point, if it fails, there is no much to do other than scheduling a revert for later
+    %{id: username, currencies: currencies} = UserAdapter.get_user(o.username)
 
     # revert in the opposite direction
     amount = if o.direction == :debit, do: o.amount, else: -o.amount
@@ -155,16 +162,6 @@ defmodule ExBanking.Transactions.TransactionWorker do
                 {name, Map.put(args, :pid, self())}
               )
       end)
-
-  defp fetch_user(username) do
-    case UserAdapter.get_user(username) do
-      {:ok, user} ->
-        user
-
-      _ ->
-        nil
-    end
-  end
 
   defp execute_operations(transaction, operations) when is_list(operations) do
     Enum.reduce_while(operations, {:ok, {transaction, %{}}}, fn o, {:ok, {t, balances}} ->
@@ -231,14 +228,11 @@ defmodule ExBanking.Transactions.TransactionWorker do
   defp create_in_progress_transaction(input) do
     %TransactionAdapter{
       id: UUID.uuid4(),
-      type: transaction_type(input),
+      type: input.type,
       operations: [],
       status: :in_progress,
       transaction_worker: self()
     }
     |> TransactionAdapter.create_transaction()
   end
-
-  defp transaction_type({:send, _from_user, _to_user, _currency, _amount}), do: :send
-  defp transaction_type({type, _username, _currency, _amount}), do: type
 end

@@ -1,4 +1,4 @@
-defmodule ExBanking.AppSuperviser do
+defmodule ExBanking.AppSupervisor do
   use Application
 
   @doc """
